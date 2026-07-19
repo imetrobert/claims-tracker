@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Claims Tracker</title>
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --ink:#1c2b2d;
+    --paper:#f7f5f0;
+    --ledger:#233b3d;
+    --ledger-line:#d8d2c4;
+    --accent:#b5502f;
+    --accent-soft:#f0e2da;
+    --ok:#3c6e5a;
+    --ok-soft:#e2ede7;
+    --warn:#a8781f;
+    --warn-soft:#f5e9d2;
+    --mono: 'Courier New', ui-monospace, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;
+    padding-bottom:70px;
+  }
+  header{
+    background:var(--ledger);
+    color:var(--paper);
+    padding:18px 16px 14px;
+    position:sticky; top:0; z-index:20;
+  }
+  header .brand{
+    font-size:11px; letter-spacing:.14em; text-transform:uppercase;
+    opacity:.65; margin-bottom:2px;
+  }
+  header h1{
+    margin:0; font-size:20px; font-weight:600; letter-spacing:.01em;
+  }
+  header .sub{font-size:12px; opacity:.6; margin-top:3px;}
+  nav{
+    display:flex; background:#fff; border-bottom:1px solid var(--ledger-line);
+    position:sticky; top:64px; z-index:19;
+  }
+  nav button{
+    flex:1; padding:11px 4px; background:none; border:none;
+    font-size:12.5px; font-weight:600; color:#8a8578; letter-spacing:.03em;
+    border-bottom:2px solid transparent; font-family:var(--sans);
+  }
+  nav button.active{ color:var(--ledger); border-bottom-color:var(--accent); }
+  main{ padding:14px; max-width:720px; margin:0 auto; }
+  .card{
+    background:#fff; border:1px solid var(--ledger-line); border-radius:10px;
+    padding:16px; margin-bottom:14px;
+  }
+  .card h2{ font-size:14px; text-transform:uppercase; letter-spacing:.06em; margin:0 0 12px; color:var(--ledger); }
+  .row{ display:flex; gap:8px; flex-wrap:wrap; }
+  select, input[type=text], input[type=password], input[type=email], input[type=number], input[type=date]{
+    font-family:var(--sans); font-size:14px; padding:9px 10px; border:1px solid var(--ledger-line);
+    border-radius:7px; background:#fff; color:var(--ink);
+  }
+  button.btn{
+    font-family:var(--sans); font-size:13.5px; font-weight:600; padding:10px 16px;
+    border-radius:7px; border:1px solid var(--ledger); background:var(--ledger); color:#fff;
+    cursor:pointer;
+  }
+  button.btn.secondary{ background:#fff; color:var(--ledger); }
+  button.btn.warn{ background:var(--accent); border-color:var(--accent); }
+  button.btn.small{ font-size:12px; padding:6px 10px; border-radius:6px; }
+  button.btn:disabled{ opacity:.4; }
+  .drop{
+    border:1.5px dashed var(--ledger-line); border-radius:10px; padding:28px 14px;
+    text-align:center; color:#8a8578; font-size:13px;
+  }
+  .thumbs{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+  .thumbs img{ width:64px; height:64px; object-fit:cover; border-radius:6px; border:1px solid var(--ledger-line); }
+  table{ width:100%; border-collapse:collapse; font-size:13px; }
+  th{
+    text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:.04em;
+    color:#8a8578; padding:6px 6px; border-bottom:1px solid var(--ledger-line);
+  }
+  td{ padding:8px 6px; border-bottom:1px solid #ece8dd; vertical-align:top; }
+  td.num, th.num{ text-align:right; font-family:var(--mono); }
+  tr.duplicate td, tr.excluded td{ opacity:.45; text-decoration:line-through; }
+  .tag{
+    display:inline-block; font-size:10.5px; font-weight:700; padding:2px 7px;
+    border-radius:20px; letter-spacing:.02em;
+  }
+  .tag.active{ background:var(--ok-soft); color:var(--ok); }
+  .tag.duplicate{ background:var(--accent-soft); color:var(--accent); }
+  .tag.excluded{ background:#eee; color:#888; }
+  .tag.suspected{ background:var(--warn-soft); color:var(--warn); }
+  .flagbar{
+    background:var(--warn-soft); border:1px solid #e2c78a; border-radius:8px;
+    padding:8px 10px; margin-bottom:6px; font-size:12.5px; color:#6b4d15;
+    display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;
+  }
+  .summary-row{ display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid #ece8dd; }
+  .summary-row:last-child{ border-bottom:none; }
+  .summary-row .name{ font-weight:600; }
+  .summary-row .amt{ font-family:var(--mono); font-size:16px; font-weight:700; color:var(--ledger); }
+  .total-line{ margin-top:8px; padding-top:12px; border-top:2px solid var(--ledger); display:flex; justify-content:space-between; }
+  .total-line .amt{ font-family:var(--mono); font-size:19px; font-weight:800; color:var(--accent); }
+  .muted{ color:#8a8578; font-size:12.5px; }
+  .err{ color:var(--accent); font-size:13px; margin-top:8px; }
+  .login-wrap{ min-height:80vh; display:flex; align-items:center; justify-content:center; padding:20px; }
+  .login-card{ background:#fff; border:1px solid var(--ledger-line); border-radius:12px; padding:26px 22px; width:100%; max-width:340px; }
+  .login-card h1{ font-size:18px; margin:0 0 4px; }
+  .login-card .muted{ margin-bottom:18px; }
+  .login-card input{ width:100%; margin-bottom:10px; }
+  .login-card button{ width:100%; }
+  .field-label{ font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; color:#8a8578; display:block; margin-bottom:3px; }
+  .filters{ margin-bottom:12px; }
+  .hidden{ display:none !important; }
+  .spin{ display:inline-block; width:13px; height:13px; border:2px solid #fff5; border-top-color:#fff; border-radius:50%; animation:sp .7s linear infinite; vertical-align:-2px; margin-right:6px; }
+  @keyframes sp{ to{ transform:rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div id="login-screen" class="login-wrap">
+  <div class="login-card">
+    <h1>Claims Tracker</h1>
+    <div class="muted">Private family claims ledger</div>
+    <input type="email" id="login-email" placeholder="Email">
+    <input type="password" id="login-password" placeholder="Password">
+    <button class="btn" onclick="doLogin()">Sign in</button>
+    <div id="login-err" class="err"></div>
+  </div>
+</div>
+
+<div id="app" class="hidden">
+  <header>
+    <div class="brand">AI with Robert</div>
+    <h1>Claims Tracker</h1>
+    <div class="sub" id="header-sub">—</div>
+  </header>
+  <nav>
+    <button class="active" data-tab="upload" onclick="showTab('upload')">Upload</button>
+    <button data-tab="claims" onclick="showTab('claims')">Claims</button>
+    <button data-tab="summary" onclick="showTab('summary')">Summary</button>
+  </nav>
+
+  <main>
+
+    <!-- UPLOAD TAB -->
+    <section id="tab-upload">
+      <div class="card">
+        <h2>Add screenshots</h2>
+        <p class="muted">Use Manulife's "Print summary" view (Search my claims → Print summary). Upload one or more screenshots — each can contain many rows.</p>
+        <input type="file" id="file-input" accept="image/*" multiple style="margin-bottom:10px;">
+        <div class="thumbs" id="thumbs"></div>
+        <div class="row" style="margin-top:12px;">
+          <button class="btn" id="extract-btn" onclick="extractAll()" disabled>Extract claims</button>
+        </div>
+        <div id="extract-status" class="muted" style="margin-top:8px;"></div>
+      </div>
+
+      <div class="card hidden" id="review-card">
+        <h2>Review before saving</h2>
+        <p class="muted">Check the extracted rows. Fix anything wrong, then save.</p>
+        <div id="review-table"></div>
+        <div class="row" style="margin-top:12px;">
+          <button class="btn" onclick="saveReviewed()">Save all to ledger</button>
+          <button class="btn secondary" onclick="cancelReview()">Discard</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- CLAIMS TAB -->
+    <section id="tab-claims" class="hidden">
+      <div class="card filters">
+        <div class="row">
+          <select id="filter-year" onchange="renderClaims()"></select>
+          <select id="filter-person" onchange="renderClaims()"></select>
+          <select id="filter-status" onchange="renderClaims()">
+            <option value="all">All statuses</option>
+            <option value="active" selected>Active only</option>
+            <option value="duplicate">Duplicates</option>
+            <option value="excluded">Excluded</option>
+          </select>
+        </div>
+      </div>
+      <div id="flags-area"></div>
+      <div class="card">
+        <h2>Line items</h2>
+        <div id="claims-table"></div>
+      </div>
+      <div class="row">
+        <button class="btn secondary" onclick="exportCSV()">Export CSV</button>
+      </div>
+    </section>
+
+    <!-- SUMMARY TAB -->
+    <section id="tab-summary" class="hidden">
+      <div class="card filters">
+        <select id="summary-year" onchange="renderSummary()"></select>
+      </div>
+      <div class="card">
+        <h2>Not covered, per person</h2>
+        <div id="summary-body"></div>
+      </div>
+      <p class="muted">This total reflects "active" claims only — anything marked duplicate or excluded is not included. Export the CSV from the Claims tab to show your accountant exactly how each total was calculated.</p>
+    </section>
+
+  </main>
+</div>
+
+<script>
+/* ====================== CONFIGURE THESE ====================== */
+const SUPABASE_URL = "YOUR_SUPABASE_URL";
+const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
+const GEMINI_API_KEY = "YOUR_GEMINI_API_KEY";
+/* ================================================================ */
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let allClaims = [];
+let pendingFiles = [];
+let reviewedRows = [];
+
+// ---------- AUTH ----------
+async function doLogin(){
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  const errEl = document.getElementById('login-err');
+  errEl.textContent = '';
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  if (error){ errEl.textContent = error.message; return; }
+  await enterApp();
+}
+
+async function enterApp(){
+  const { data: { user } } = await sb.auth.getUser();
+  document.getElementById('login-screen').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+  document.getElementById('header-sub').textContent = user ? user.email : '';
+  await loadClaims();
+}
+
+(async function init(){
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) await enterApp();
+})();
+
+// ---------- TABS ----------
+function showTab(name){
+  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active', b.dataset.tab===name));
+  ['upload','claims','summary'].forEach(t=>{
+    document.getElementById('tab-'+t).classList.toggle('hidden', t!==name);
+  });
+  if (name==='claims') renderClaims();
+  if (name==='summary') renderSummary();
+}
+
+// ---------- UPLOAD + EXTRACT ----------
+document.getElementById('file-input').addEventListener('change', (e)=>{
+  pendingFiles = Array.from(e.target.files);
+  const thumbs = document.getElementById('thumbs');
+  thumbs.innerHTML = '';
+  pendingFiles.forEach(f=>{
+    const img = document.createElement('img');
+    img.src = URL.createObjectURL(f);
+    thumbs.appendChild(img);
+  });
+  document.getElementById('extract-btn').disabled = pendingFiles.length===0;
+});
+
+function fileToBase64(file){
+  return new Promise((res,rej)=>{
+    const r = new FileReader();
+    r.onload = ()=> res(r.result.split(',')[1]);
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+}
+
+const EXTRACTION_PROMPT = `You are reading a screenshot of a Manulife "Print summary" claims table.
+Columns are: Name, Service, Service Date, Amount Submitted, Benefit Paid, Status (Statement column can be ignored).
+Extract every row you can see into a JSON array. Each item must have exactly these fields:
+- person (string, exactly as shown, e.g. "SIMON,ROBERT")
+- service (string, e.g. "Drugs", "Psychologist")
+- service_date (string, ISO format YYYY-MM-DD, convert from the displayed date)
+- amount_submitted (number, no currency symbol)
+- amount_paid (number, no currency symbol; this is the "Benefit Paid" column)
+Return ONLY a raw JSON array, no markdown fences, no commentary, no extra text.`;
+
+async function extractAll(){
+  const btn = document.getElementById('extract-btn');
+  const statusEl = document.getElementById('extract-status');
+  btn.disabled = true;
+  let combined = [];
+  for (let i=0;i<pendingFiles.length;i++){
+    statusEl.textContent = `Reading screenshot ${i+1} of ${pendingFiles.length}...`;
+    try{
+      const b64 = await fileToBase64(pendingFiles[i]);
+      const rows = await callGeminiVision(b64, pendingFiles[i].type);
+      combined = combined.concat(rows);
+    }catch(err){
+      statusEl.textContent = `Error reading screenshot ${i+1}: ${err.message}`;
+      btn.disabled = false;
+      return;
+    }
+  }
+  statusEl.textContent = `Extracted ${combined.length} row(s). Review below before saving.`;
+  reviewedRows = combined.map(r=>({
+    person: r.person || '',
+    service: r.service || '',
+    service_date: r.service_date || '',
+    amount_submitted: Number(r.amount_submitted)||0,
+    amount_paid: Number(r.amount_paid)||0,
+  }));
+  renderReview();
+  btn.disabled = false;
+}
+
+async function callGeminiVision(base64, mimeType){
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+  const body = {
+    contents: [{
+      parts: [
+        { text: EXTRACTION_PROMPT },
+        { inline_data: { mime_type: mimeType || 'image/png', data: base64 } }
+      ]
+    }]
+  };
+  const resp = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  const data = await resp.json();
+  if (!resp.ok) throw new Error(data.error?.message || 'Gemini API error');
+  let text = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
+  text = text.trim().replace(/^```json/,'').replace(/^```/,'').replace(/```$/,'').trim();
+  try{
+    return JSON.parse(text);
+  }catch(e){
+    throw new Error('Could not parse extraction result — try a clearer screenshot.');
+  }
+}
+
+function renderReview(){
+  const card = document.getElementById('review-card');
+  if (reviewedRows.length===0){ card.classList.add('hidden'); return; }
+  card.classList.remove('hidden');
+  let html = `<table><tr>
+    <th>Name</th><th>Service</th><th>Date</th><th class="num">Submitted</th><th class="num">Paid</th><th></th>
+  </tr>`;
+  reviewedRows.forEach((r,i)=>{
+    html += `<tr>
+      <td><input type="text" value="${escAttr(r.person)}" onchange="reviewedRows[${i}].person=this.value" style="width:110px"></td>
+      <td><input type="text" value="${escAttr(r.service)}" onchange="reviewedRows[${i}].service=this.value" style="width:90px"></td>
+      <td><input type="date" value="${r.service_date}" onchange="reviewedRows[${i}].service_date=this.value" style="width:130px"></td>
+      <td class="num"><input type="number" step="0.01" value="${r.amount_submitted}" onchange="reviewedRows[${i}].amount_submitted=Number(this.value)" style="width:70px"></td>
+      <td class="num"><input type="number" step="0.01" value="${r.amount_paid}" onchange="reviewedRows[${i}].amount_paid=Number(this.value)" style="width:70px"></td>
+      <td><button class="btn small secondary" onclick="reviewedRows.splice(${i},1); renderReview();">✕</button></td>
+    </tr>`;
+  });
+  html += `</table>`;
+  document.getElementById('review-table').innerHTML = html;
+}
+
+function cancelReview(){
+  reviewedRows = [];
+  pendingFiles = [];
+  document.getElementById('thumbs').innerHTML = '';
+  document.getElementById('extract-status').textContent = '';
+  document.getElementById('extract-btn').disabled = true;
+  document.getElementById('review-card').classList.add('hidden');
+}
+
+async function saveReviewed(){
+  if (reviewedRows.length===0) return;
+  const inserts = reviewedRows.map(r=>({
+    person: r.person,
+    service: r.service,
+    service_date: r.service_date,
+    tax_year: new Date(r.service_date).getFullYear(),
+    amount_submitted: r.amount_submitted,
+    amount_paid: r.amount_paid,
+    status: 'active'
+  }));
+  const { error } = await sb.from('claims').insert(inserts);
+  if (error){ alert('Save failed: '+error.message); return; }
+  cancelReview();
+  await loadClaims();
+  await detectSuspectedDuplicates();
+  showTab('claims');
+}
+
+// ---------- LOAD + DUPLICATE DETECTION ----------
+async function loadClaims(){
+  const { data, error } = await sb.from('claims').select('*').order('service_date', {ascending:false});
+  if (error){ console.error(error); return; }
+  allClaims = data || [];
+  populateFilters();
+}
+
+async function detectSuspectedDuplicates(){
+  // Group by person + amount_submitted + service_date
+  const groups = {};
+  allClaims.forEach(c=>{
+    const key = c.person+'|'+c.amount_submitted+'|'+c.service_date;
+    (groups[key] = groups[key]||[]).push(c);
+  });
+  const toFlag = [];
+  Object.values(groups).forEach(group=>{
+    if (group.length < 2) return;
+    const hasPaidRow = group.some(c=>Number(c.amount_paid) > 0);
+    if (!hasPaidRow) return;
+    group.forEach(c=>{
+      if (Number(c.amount_paid)===0 && c.status==='active' && !c.flag_status){
+        toFlag.push(c.id);
+      }
+    });
+  });
+  if (toFlag.length===0) return;
+  await sb.from('claims').update({ flag_status:'suspected' }).in('id', toFlag);
+  await loadClaims();
+}
+
+function populateFilters(){
+  const years = [...new Set(allClaims.map(c=>c.tax_year))].sort((a,b)=>b-a);
+  const persons = [...new Set(allClaims.map(c=>c.person))].sort();
+
+  const yearSel = document.getElementById('filter-year');
+  const prevYear = yearSel.value;
+  yearSel.innerHTML = `<option value="all">All years</option>` + years.map(y=>`<option value="${y}">${y}</option>`).join('');
+  if (years.includes(Number(prevYear))) yearSel.value = prevYear;
+
+  const personSel = document.getElementById('filter-person');
+  const prevPerson = personSel.value;
+  personSel.innerHTML = `<option value="all">All people</option>` + persons.map(p=>`<option value="${escAttr(p)}">${p}</option>`).join('');
+  if (persons.includes(prevPerson)) personSel.value = prevPerson;
+
+  const summaryYearSel = document.getElementById('summary-year');
+  const prevSY = summaryYearSel.value;
+  summaryYearSel.innerHTML = `<option value="all">All years</option>` + years.map(y=>`<option value="${y}">${y}</option>`).join('');
+  if (years.includes(Number(prevSY))) summaryYearSel.value = prevSY;
+}
+
+// ---------- CLAIMS TABLE ----------
+function filteredClaims(){
+  const year = document.getElementById('filter-year').value;
+  const person = document.getElementById('filter-person').value;
+  const status = document.getElementById('filter-status').value;
+  return allClaims.filter(c=>{
+    if (year!=='all' && String(c.tax_year)!==year) return false;
+    if (person!=='all' && c.person!==person) return false;
+    if (status!=='all' && c.status!==status) return false;
+    return true;
+  });
+}
+
+function renderClaims(){
+  const rows = filteredClaims();
+  // suspected duplicates bar
+  const flagged = allClaims.filter(c=>c.flag_status==='suspected');
+  const flagsArea = document.getElementById('flags-area');
+  if (flagged.length){
+    flagsArea.innerHTML = flagged.map(c=>`
+      <div class="flagbar">
+        <span>⚠ Suspected duplicate: <strong>${c.person}</strong> — ${c.service}, ${c.service_date}, $${Number(c.amount_submitted).toFixed(2)} submitted, $0 paid</span>
+        <span class="row">
+          <button class="btn small warn" onclick="resolveFlag('${c.id}','confirmed_duplicate')">Confirm duplicate</button>
+          <button class="btn small secondary" onclick="resolveFlag('${c.id}','rejected_not_duplicate')">Not a duplicate</button>
+        </span>
+      </div>`).join('');
+  } else {
+    flagsArea.innerHTML = '';
+  }
+
+  if (rows.length===0){
+    document.getElementById('claims-table').innerHTML = `<p class="muted">No claims match these filters yet.</p>`;
+    return;
+  }
+  let html = `<table><tr>
+    <th>Name</th><th>Service</th><th>Date</th><th class="num">Sub.</th><th class="num">Paid</th><th class="num">Not cov.</th><th>Status</th><th></th>
+  </tr>`;
+  rows.forEach(c=>{
+    const notCovered = Number(c.amount_submitted) - Number(c.amount_paid);
+    const rowClass = c.status==='duplicate' ? 'duplicate' : (c.status==='excluded' ? 'excluded' : '');
+    html += `<tr class="${rowClass}">
+      <td>${c.person}</td>
+      <td>${c.service}</td>
+      <td>${c.service_date}</td>
+      <td class="num">$${Number(c.amount_submitted).toFixed(2)}</td>
+      <td class="num">$${Number(c.amount_paid).toFixed(2)}</td>
+      <td class="num">$${notCovered.toFixed(2)}</td>
+      <td><span class="tag ${c.flag_status==='suspected'?'suspected':c.status}">${c.flag_status==='suspected'?'check flag':c.status}</span></td>
+      <td>${rowActions(c)}</td>
+    </tr>`;
+  });
+  html += `</table>`;
+  document.getElementById('claims-table').innerHTML = html;
+}
+
+function rowActions(c){
+  if (c.status==='active'){
+    return `<button class="btn small secondary" onclick="setStatus('${c.id}','duplicate')">Dup</button>
+            <button class="btn small secondary" onclick="setStatus('${c.id}','excluded')">Excl.</button>`;
+  }
+  return `<button class="btn small secondary" onclick="setStatus('${c.id}','active')">Restore</button>`;
+}
+
+async function setStatus(id, status){
+  await sb.from('claims').update({ status }).eq('id', id);
+  await loadClaims();
+  renderClaims();
+}
+
+async function resolveFlag(id, resolution){
+  const updates = { flag_status: resolution };
+  if (resolution==='confirmed_duplicate') updates.status = 'duplicate';
+  await sb.from('claims').update(updates).eq('id', id);
+  await loadClaims();
+  renderClaims();
+}
+
+// ---------- SUMMARY ----------
+function renderSummary(){
+  const year = document.getElementById('summary-year').value;
+  const rows = allClaims.filter(c=>c.status==='active' && (year==='all' || String(c.tax_year)===year));
+  const byPerson = {};
+  rows.forEach(c=>{
+    const notCovered = Number(c.amount_submitted) - Number(c.amount_paid);
+    byPerson[c.person] = (byPerson[c.person]||0) + notCovered;
+  });
+  const people = Object.keys(byPerson).sort();
+  const grandTotal = Object.values(byPerson).reduce((a,b)=>a+b,0);
+  let html = '';
+  if (people.length===0){
+    html = `<p class="muted">No active claims for this selection.</p>`;
+  } else {
+    people.forEach(p=>{
+      html += `<div class="summary-row"><span class="name">${p}</span><span class="amt">$${byPerson[p].toFixed(2)}</span></div>`;
+    });
+    html += `<div class="total-line"><span>Total</span><span class="amt">$${grandTotal.toFixed(2)}</span></div>`;
+  }
+  document.getElementById('summary-body').innerHTML = html;
+}
+
+// ---------- CSV EXPORT ----------
+function exportCSV(){
+  const rows = filteredClaims();
+  const header = ['Person','Service','Service Date','Tax Year','Amount Submitted','Amount Paid','Not Covered','Status','Flag'];
+  const lines = [header.join(',')];
+  rows.forEach(c=>{
+    const notCovered = (Number(c.amount_submitted) - Number(c.amount_paid)).toFixed(2);
+    lines.push([
+      csvEsc(c.person), csvEsc(c.service), c.service_date, c.tax_year,
+      Number(c.amount_submitted).toFixed(2), Number(c.amount_paid).toFixed(2), notCovered,
+      c.status, c.flag_status||''
+    ].join(','));
+  });
+  const blob = new Blob([lines.join('\n')], { type:'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `claims-export-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
+function csvEsc(v){
+  if (v==null) return '';
+  const s = String(v);
+  return /[,"\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+}
+function escAttr(s){ return String(s||'').replace(/"/g,'&quot;'); }
+</script>
+</body>
+</html>
