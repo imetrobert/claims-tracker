@@ -32,11 +32,19 @@ function showDiagnostics(){
   const hasLeadingTrailingSpace = raw !== trimmed;
   const hasQuotes = /^["']|["']$/.test(raw);
   const hasNewline = /[\r\n]/.test(raw);
-  const startsRight = trimmed.startsWith('AIza');
+  const isStandard = trimmed.startsWith('AIza');
+  const isAuthKey = trimmed.startsWith('AQ.');
+  const startsRight = isStandard || isAuthKey;
   const len = trimmed.length;
 
-  let html = `Length: ${len} characters ${len>=35 && len<=45 ? '<span class="good">(looks right)</span>' : '<span class="warn">(expected ~39)</span>'}<br>`;
-  html += `Starts with "AIza": ${startsRight ? '<span class="good">yes</span>' : '<span class="warn">NO — this is likely not the right value</span>'}<br>`;
+  let html = `Length: ${len} characters<br>`;
+  if (isStandard){
+    html += `Format: <span class="good">Standard key (AIza...) — looks right</span><br>`;
+  } else if (isAuthKey){
+    html += `Format: <span class="good">Auth key (AQ....) — Google's newer key format, looks right</span><br>`;
+  } else {
+    html += `Format: <span class="warn">Doesn't start with "AIza" or "AQ." — likely not a Gemini API key</span><br>`;
+  }
   if (hasLeadingTrailingSpace) html += `<span class="warn">⚠ Has leading/trailing space or newline — will be auto-trimmed before testing</span><br>`;
   if (hasQuotes) html += `<span class="warn">⚠ Looks like quote marks got copied along with the key — remove them</span><br>`;
   if (hasNewline) html += `<span class="warn">⚠ Contains a line break</span><br>`;
@@ -53,10 +61,10 @@ async function testKey(){
   el.textContent = 'Testing...';
   if (!key){ el.textContent = 'Paste a key first.'; el.className='fail'; return; }
   try{
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(key)}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent`;
     const resp = await fetch(url, {
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers:{'Content-Type':'application/json', 'X-goog-api-key': key},
       body: JSON.stringify({ contents:[{ parts:[{ text:'Reply with just the word OK.' }] }] })
     });
     const data = await resp.json();
