@@ -61,7 +61,7 @@ async function testKey(){
   el.textContent = 'Testing...';
   if (!key){ el.textContent = 'Paste a key first.'; el.className='fail'; return; }
   try{
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent`;
     const resp = await fetch(url, {
       method:'POST',
       headers:{'Content-Type':'application/json', 'X-goog-api-key': key},
