@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>imetrobert.com Personal Health and Dental Claims</title>
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script src="https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://unpkg.com/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.js"></script>
 <style>
   :root{
     --ink:#1c2b2d;
@@ -218,7 +220,11 @@
         <h2>Not covered, per person</h2>
         <div id="summary-body"></div>
       </div>
-      <p class="muted">This total reflects "active" claims only — anything marked duplicate or excluded is not included. Export the CSV from the Claims tab to show your accountant exactly how each total was calculated.</p>
+      <div class="row">
+        <button class="btn secondary" onclick="exportSummaryCSV()">Export CSV</button>
+        <button class="btn secondary" onclick="exportSummaryPDF()">Export PDF</button>
+      </div>
+      <p class="muted">This total reflects "active" claims only — anything marked duplicate or excluded is not included. Export includes the summary above plus every transaction that adds up to it, for the year selected.</p>
     </section>
 
   </main>
@@ -622,6 +628,108 @@ function renderSummary(){
     html += `<div class="total-line"><span>Total</span><span class="amt">$${grandTotal.toFixed(2)}</span></div>`;
   }
   document.getElementById('summary-body').innerHTML = html;
+}
+
+// ---------- SUMMARY EXPORT ----------
+function summaryExportRows(year){
+  return allClaims
+    .filter(c=>c.status==='active' && (year==='all' || String(c.tax_year)===year))
+    .slice()
+    .sort((a,b)=> a.person===b.person ? a.service_date.localeCompare(b.service_date) : a.person.localeCompare(b.person));
+}
+
+function summaryTotals(rows){
+  const byPerson = {};
+  rows.forEach(c=>{
+    const notCovered = Number(c.amount_submitted) - Number(c.amount_paid);
+    byPerson[c.person] = (byPerson[c.person]||0) + notCovered;
+  });
+  const people = Object.keys(byPerson).sort();
+  const grandTotal = Object.values(byPerson).reduce((a,b)=>a+b,0);
+  return { byPerson, people, grandTotal };
+}
+
+function exportSummaryCSV(){
+  const year = document.getElementById('summary-year').value;
+  const yearLabel = year==='all' ? 'All years' : year;
+  const rows = summaryExportRows(year);
+  const { byPerson, people, grandTotal } = summaryTotals(rows);
+
+  const lines = [];
+  lines.push(csvEsc(`Family Claims Summary — ${yearLabel}`));
+  lines.push('');
+  lines.push('Person,Not Covered Total');
+  people.forEach(p=> lines.push(`${csvEsc(p)},${byPerson[p].toFixed(2)}`));
+  lines.push(`Total,${grandTotal.toFixed(2)}`);
+  lines.push('');
+  lines.push('Transactions (active claims only)');
+  lines.push(['Person','Service','Service Date','Amount Submitted','Amount Paid','Not Covered','Insurer'].join(','));
+  rows.forEach(c=>{
+    const notCovered = (Number(c.amount_submitted) - Number(c.amount_paid)).toFixed(2);
+    lines.push([
+      csvEsc(c.person), csvEsc(c.service), c.service_date,
+      Number(c.amount_submitted).toFixed(2), Number(c.amount_paid).toFixed(2), notCovered,
+      csvEsc(c.insurer||'')
+    ].join(','));
+  });
+  lines.push('');
+  lines.push(`,,,,,${grandTotal.toFixed(2)},`);
+
+  const blob = new Blob([lines.join('\n')], { type:'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `family-claims-summary-${year==='all'?'all-years':year}.csv`;
+  a.click();
+}
+
+function exportSummaryPDF(){
+  const year = document.getElementById('summary-year').value;
+  const yearLabel = year==='all' ? 'All years' : year;
+  const rows = summaryExportRows(year);
+  const { byPerson, people, grandTotal } = summaryTotals(rows);
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+
+  doc.setFontSize(16);
+  doc.text('Family Claims Summary', 14, 18);
+  doc.setFontSize(11);
+  doc.text(`Year: ${yearLabel}`, 14, 26);
+
+  doc.autoTable({
+    startY: 32,
+    head: [['Person', 'Not Covered Total']],
+    body: people.map(p=>[p, `$${byPerson[p].toFixed(2)}`]),
+    foot: [['Total', `$${grandTotal.toFixed(2)}`]],
+    styles: { fontSize: 9 },
+    headStyles: { fillColor: [35,59,61] },
+    footStyles: { fillColor: [35,59,61] },
+  });
+
+  const afterSummaryY = doc.lastAutoTable.finalY + 10;
+  doc.setFontSize(13);
+  doc.text('Transactions (active claims only)', 14, afterSummaryY);
+
+  doc.autoTable({
+    startY: afterSummaryY + 4,
+    head: [['Person','Service','Date','Submitted','Paid','Not Covered','Insurer']],
+    body: rows.map(c=>{
+      const notCovered = Number(c.amount_submitted) - Number(c.amount_paid);
+      return [
+        c.person, c.service, c.service_date,
+        `$${Number(c.amount_submitted).toFixed(2)}`,
+        `$${Number(c.amount_paid).toFixed(2)}`,
+        `$${notCovered.toFixed(2)}`,
+        c.insurer||''
+      ];
+    }),
+    foot: [['', '', '', '', 'Total', `$${grandTotal.toFixed(2)}`, '']],
+    styles: { fontSize: 8 },
+    headStyles: { fillColor: [35,59,61] },
+    footStyles: { fillColor: [35,59,61] },
+  });
+
+  doc.save(`family-claims-summary-${year==='all'?'all-years':year}.pdf`);
 }
 
 // ---------- CSV EXPORT ----------
