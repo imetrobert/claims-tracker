@@ -154,7 +154,13 @@
     <section id="tab-upload">
       <div class="card">
         <h2>Add screenshots</h2>
-        <p class="muted">Use Manulife's "Print summary" view (Search my claims → Print summary). Upload one or more screenshots — each can contain many rows.</p>
+        <p class="muted">Manulife: use the "Print summary" view (Search my claims → Print summary). Blue Cross: use your claims history/statement screen. Upload one or more screenshots — each can contain many rows.</p>
+        <label class="field-label">Insurer</label>
+        <select id="insurer-select" style="width:100%;margin-bottom:10px;">
+          <option value="Manulife">Manulife</option>
+          <option value="Blue Cross">Blue Cross</option>
+          <option value="Other">Other</option>
+        </select>
         <input type="file" id="file-input" accept="image/*" multiple style="margin-bottom:10px;">
         <div class="muted" style="margin-top:-4px;margin-bottom:10px;">Up to 3 screenshots at a time</div>
         <div class="thumbs" id="thumbs"></div>
@@ -295,26 +301,36 @@ function fileToBase64(file){
   });
 }
 
-const EXTRACTION_PROMPT = `You are reading a screenshot of a Manulife "Print summary" claims table.
-Columns are: Name, Service, Service Date, Amount Submitted, Benefit Paid, Status (Statement column can be ignored).
-Extract every row you can see into a JSON array. Each item must have exactly these fields:
-- person (string, exactly as shown, e.g. "SIMON,ROBERT")
-- service (string, e.g. "Drugs", "Psychologist")
-- service_date (string, ISO format YYYY-MM-DD, convert from the displayed date)
-- amount_submitted (number, no currency symbol)
-- amount_paid (number, no currency symbol; this is the "Benefit Paid" column)
+function buildExtractionPrompt(insurer){
+  const common = `You are reading a screenshot of a health/dental insurance claims statement or claims history table.
+It may be from different insurers with different column names — map whatever you see to this schema:
+- person: the claimant/patient name, exactly as shown
+- service: the type of service, treatment, or provider (e.g. "Drugs", "Psychologist", "Dental Cleaning")
+- service_date: ISO format YYYY-MM-DD, converted from whatever date format is shown
+- amount_submitted: the amount claimed/submitted/billed (number, no currency symbol)
+- amount_paid: the amount paid/reimbursed/covered by insurance (number, no currency symbol; use 0 if the row shows the claim was denied or fully unpaid)
+Extract every row visible into a JSON array of objects with exactly these five fields.
 Return ONLY a raw JSON array, no markdown fences, no commentary, no extra text.`;
+
+  const hints = {
+    'Manulife': `\n\nThis is specifically a Manulife "Print summary" table. Columns are: Name, Service, Service Date, Amount Submitted, Benefit Paid, Status (ignore the Statement column).`,
+    'Blue Cross': `\n\nThis is a Quebec Blue Cross claims statement. Look for columns/labels such as Claimant or Name, Type of Service or Description, Date of Service, Amount Submitted or Billed, and Amount Paid or Reimbursed — exact labels can vary by screen.`,
+    'Other': ``
+  };
+  return common + (hints[insurer] || '');
+}
 
 async function extractAll(){
   const btn = document.getElementById('extract-btn');
   const statusEl = document.getElementById('extract-status');
+  const insurer = document.getElementById('insurer-select').value;
   btn.disabled = true;
   let combined = [];
   for (let i=0;i<pendingFiles.length;i++){
     statusEl.textContent = `Reading screenshot ${i+1} of ${pendingFiles.length}...`;
     try{
       const b64 = await fileToBase64(pendingFiles[i]);
-      const rows = await callGeminiVision(b64, pendingFiles[i].type);
+      const rows = await callGeminiVision(b64, pendingFiles[i].type, insurer);
       combined = combined.concat(rows);
     }catch(err){
       statusEl.textContent = `Error reading screenshot ${i+1}: ${err.message}`;
@@ -329,17 +345,18 @@ async function extractAll(){
     service_date: r.service_date || '',
     amount_submitted: Number(r.amount_submitted)||0,
     amount_paid: Number(r.amount_paid)||0,
+    insurer: insurer,
   }));
   renderReview();
   btn.disabled = false;
 }
 
-async function callGeminiVision(base64, mimeType){
+async function callGeminiVision(base64, mimeType, insurer){
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent`;
   const body = {
     contents: [{
       parts: [
-        { text: EXTRACTION_PROMPT },
+        { text: buildExtractionPrompt(insurer) },
         { inline_data: { mime_type: mimeType || 'image/png', data: base64 } }
       ]
     }]
@@ -361,7 +378,7 @@ function renderReview(){
   if (reviewedRows.length===0){ card.classList.add('hidden'); return; }
   card.classList.remove('hidden');
   let html = `<table><tr>
-    <th>Name</th><th>Service</th><th>Date</th><th class="num">Submitted</th><th class="num">Paid</th><th></th>
+    <th>Name</th><th>Service</th><th>Date</th><th class="num">Submitted</th><th class="num">Paid</th><th>Insurer</th><th></th>
   </tr>`;
   reviewedRows.forEach((r,i)=>{
     html += `<tr>
@@ -370,6 +387,7 @@ function renderReview(){
       <td><input type="date" value="${r.service_date}" onchange="reviewedRows[${i}].service_date=this.value" style="width:130px"></td>
       <td class="num"><input type="number" step="0.01" value="${r.amount_submitted}" onchange="reviewedRows[${i}].amount_submitted=Number(this.value)" style="width:70px"></td>
       <td class="num"><input type="number" step="0.01" value="${r.amount_paid}" onchange="reviewedRows[${i}].amount_paid=Number(this.value)" style="width:70px"></td>
+      <td><input type="text" value="${escAttr(r.insurer||'')}" onchange="reviewedRows[${i}].insurer=this.value" style="width:80px"></td>
       <td><button class="btn small secondary" onclick="reviewedRows.splice(${i},1); renderReview();">✕</button></td>
     </tr>`;
   });
@@ -395,7 +413,8 @@ async function saveReviewed(){
     tax_year: new Date(r.service_date).getFullYear(),
     amount_submitted: r.amount_submitted,
     amount_paid: r.amount_paid,
-    status: 'active'
+    status: 'active',
+    insurer: r.insurer || null
   }));
   const { error } = await sb.from('claims').insert(inserts);
   if (error){ alert('Save failed: '+error.message); return; }
@@ -560,14 +579,14 @@ function renderSummary(){
 // ---------- CSV EXPORT ----------
 function exportCSV(){
   const rows = filteredClaims();
-  const header = ['Person','Service','Service Date','Tax Year','Amount Submitted','Amount Paid','Not Covered','Status','Flag'];
+  const header = ['Person','Service','Service Date','Tax Year','Amount Submitted','Amount Paid','Not Covered','Status','Flag','Insurer'];
   const lines = [header.join(',')];
   rows.forEach(c=>{
     const notCovered = (Number(c.amount_submitted) - Number(c.amount_paid)).toFixed(2);
     lines.push([
       csvEsc(c.person), csvEsc(c.service), c.service_date, c.tax_year,
       Number(c.amount_submitted).toFixed(2), Number(c.amount_paid).toFixed(2), notCovered,
-      c.status, c.flag_status||''
+      c.status, c.flag_status||'', csvEsc(c.insurer||'')
     ].join(','));
   });
   const blob = new Blob([lines.join('\n')], { type:'text/csv' });
