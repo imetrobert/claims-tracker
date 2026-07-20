@@ -79,12 +79,14 @@
   }
   .thumbs{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
   .thumbs img{ width:64px; height:64px; object-fit:cover; border-radius:6px; border:1px solid var(--ledger-line); }
-  table{ width:100%; border-collapse:collapse; font-size:13px; }
+  #claims-table{ overflow-x:auto; -webkit-overflow-scrolling:touch; margin:0 -16px; padding:0 16px; }
+  table{ width:100%; min-width:640px; border-collapse:collapse; font-size:13px; }
   th{
     text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:.04em;
     color:#8a8578; padding:6px 6px; border-bottom:1px solid var(--ledger-line);
+    white-space:nowrap; font-weight:600;
   }
-  td{ padding:8px 6px; border-bottom:1px solid #ece8dd; vertical-align:top; }
+  td{ padding:8px 6px; border-bottom:1px solid #ece8dd; vertical-align:top; white-space:nowrap; font-size:13px; }
   td.num, th.num{ text-align:right; font-family:var(--mono); }
   th.sortable{ cursor:pointer; user-select:none; }
   th.sortable:hover{ color:var(--ink,#3a362c); }
