@@ -86,6 +86,8 @@
   }
   td{ padding:8px 6px; border-bottom:1px solid #ece8dd; vertical-align:top; }
   td.num, th.num{ text-align:right; font-family:var(--mono); }
+  th.sortable{ cursor:pointer; user-select:none; }
+  th.sortable:hover{ color:var(--ink,#3a362c); }
   tr.duplicate td, tr.excluded td{ opacity:.45; text-decoration:line-through; }
   .tag{
     display:inline-block; font-size:10.5px; font-weight:700; padding:2px 7px;
@@ -231,6 +233,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let allClaims = [];
 let pendingFiles = [];
 let reviewedRows = [];
+let claimsSort = { key: 'service_date', dir: 'desc' };
 
 // ---------- AUTH ----------
 function handleLoginSubmit(e){
@@ -488,8 +491,44 @@ function filteredClaims(){
   });
 }
 
+function setClaimsSort(key){
+  if (claimsSort.key === key){
+    claimsSort.dir = claimsSort.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    claimsSort = { key, dir: 'asc' };
+  }
+  renderClaims();
+}
+
+function claimsSortValue(c, key){
+  switch(key){
+    case 'amount_submitted': return Number(c.amount_submitted);
+    case 'amount_paid': return Number(c.amount_paid);
+    case 'not_covered': return Number(c.amount_submitted) - Number(c.amount_paid);
+    case 'status': return c.flag_status==='suspected' ? 'check flag' : c.status;
+    default: return c[key];
+  }
+}
+
+function sortClaims(rows){
+  const { key, dir } = claimsSort;
+  const mult = dir === 'asc' ? 1 : -1;
+  return rows.slice().sort((a,b)=>{
+    const av = claimsSortValue(a, key);
+    const bv = claimsSortValue(b, key);
+    if (av < bv) return -1 * mult;
+    if (av > bv) return 1 * mult;
+    return 0;
+  });
+}
+
+function sortArrow(key){
+  if (claimsSort.key !== key) return '';
+  return claimsSort.dir === 'asc' ? ' ▲' : ' ▼';
+}
+
 function renderClaims(){
-  const rows = filteredClaims();
+  const rows = sortClaims(filteredClaims());
   // suspected duplicates bar
   const flagged = allClaims.filter(c=>c.flag_status==='suspected');
   const flagsArea = document.getElementById('flags-area');
@@ -511,7 +550,14 @@ function renderClaims(){
     return;
   }
   let html = `<table><tr>
-    <th>Name</th><th>Service</th><th>Date</th><th class="num">Sub.</th><th class="num">Paid</th><th class="num">Not cov.</th><th>Status</th><th></th>
+    <th class="sortable" onclick="setClaimsSort('person')">Name${sortArrow('person')}</th>
+    <th class="sortable" onclick="setClaimsSort('service')">Service${sortArrow('service')}</th>
+    <th class="sortable" onclick="setClaimsSort('service_date')">Date${sortArrow('service_date')}</th>
+    <th class="num sortable" onclick="setClaimsSort('amount_submitted')">Sub.${sortArrow('amount_submitted')}</th>
+    <th class="num sortable" onclick="setClaimsSort('amount_paid')">Paid${sortArrow('amount_paid')}</th>
+    <th class="num sortable" onclick="setClaimsSort('not_covered')">Not cov.${sortArrow('not_covered')}</th>
+    <th class="sortable" onclick="setClaimsSort('status')">Status${sortArrow('status')}</th>
+    <th></th>
   </tr>`;
   rows.forEach(c=>{
     const notCovered = Number(c.amount_submitted) - Number(c.amount_paid);
