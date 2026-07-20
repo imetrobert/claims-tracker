@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>Claims Tracker</title>
+<title>imetrobert.com Personal Health and Dental Claims</title>
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 <style>
   :root{
@@ -156,6 +156,7 @@
         <h2>Add screenshots</h2>
         <p class="muted">Use Manulife's "Print summary" view (Search my claims → Print summary). Upload one or more screenshots — each can contain many rows.</p>
         <input type="file" id="file-input" accept="image/*" multiple style="margin-bottom:10px;">
+        <div class="muted" style="margin-top:-4px;margin-bottom:10px;">Up to 3 screenshots at a time</div>
         <div class="thumbs" id="thumbs"></div>
         <div class="row" style="margin-top:12px;">
           <button class="btn" id="extract-btn" onclick="extractAll()" disabled>Extract claims</button>
@@ -266,7 +267,15 @@ function showTab(name){
 
 // ---------- UPLOAD + EXTRACT ----------
 document.getElementById('file-input').addEventListener('change', (e)=>{
-  pendingFiles = Array.from(e.target.files);
+  let files = Array.from(e.target.files);
+  const statusEl = document.getElementById('extract-status');
+  if (files.length > 3){
+    statusEl.textContent = 'Max 3 screenshots at a time — using the first 3 selected.';
+    files = files.slice(0,3);
+  } else {
+    statusEl.textContent = '';
+  }
+  pendingFiles = files;
   const thumbs = document.getElementById('thumbs');
   thumbs.innerHTML = '';
   pendingFiles.forEach(f=>{
