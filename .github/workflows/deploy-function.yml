@@ -1,0 +1,29 @@
+# Deploys the `claims-extract` Edge Function to Supabase. Manual only: run it from
+# the Actions tab (works from a phone). Needs repo secret SUPABASE_ACCESS_TOKEN.
+# The Gemini key is NOT stored here; set CLAIMS_GEMINI_API_KEY in the Supabase
+# dashboard (Edge Functions -> Secrets).
+name: Deploy Supabase function
+
+on:
+  workflow_dispatch: {}
+
+env:
+  PROJECT_REF: ipnajvgwtjrlecbqfwrh   # public: it is the hostname in index.html
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Deploy the function
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase functions deploy claims-extract --project-ref "$PROJECT_REF"
+      - name: Check the function answers
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "https://${PROJECT_REF}.supabase.co/functions/v1/claims-extract")
+          echo "HTTP $code (401 = deployed and requires a session, which is correct; 404 = deploy failed)"
+          [ "$code" = "401" ]

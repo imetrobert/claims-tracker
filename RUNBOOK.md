@@ -1,11 +1,14 @@
 # Runbook — Claims Tracker (phone-friendly)
 
-## Receipt scanning fails ("Gemini API error")
-The Gemini key was hardcoded in `index.html`, which is public. It must be revoked at
-https://aistudio.google.com/apikey, so scanning stops working until the fix below.
-Interim: claims can still be entered and edited by hand.
-Proper fix (ask Claude while credits remain, or do later): move the Gemini call into a
-Supabase Edge Function holding the key as a secret, and call it with the user's session.
+## Receipt scanning fails
+1. Error mentions key/not configured: the secret `CLAIMS_GEMINI_API_KEY` is missing or
+   revoked. Make a new key at https://aistudio.google.com/apikey (project "Claims
+   tracker"), then Supabase Dashboard → Edge Functions → Secrets → set
+   `CLAIMS_GEMINI_API_KEY`. No redeploy needed.
+2. Error 404/not found: the function is not deployed. Actions → **Deploy Supabase
+   function** → Run workflow (needs repo secret `SUPABASE_ACCESS_TOKEN`).
+3. Quota errors: the free tier resets daily; try again tomorrow.
+4. Claims can always be entered by hand meanwhile.
 
 ## Site not updating
 Actions → **pages build and deployment** → re-run if red. Settings → Pages → Source:

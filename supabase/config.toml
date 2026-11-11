@@ -1,0 +1,8 @@
+# Minimal Supabase CLI config so `supabase functions deploy` knows the project.
+# Nothing secret: the project ref is already public in index.html.
+project_id = "ipnajvgwtjrlecbqfwrh"
+
+# Anonymous callers are rejected by the platform; the function also checks the
+# claims-tracker app grant.
+[functions.claims-extract]
+verify_jwt = true
