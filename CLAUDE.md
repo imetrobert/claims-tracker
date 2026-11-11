@@ -7,10 +7,9 @@ Maintenance steps: `RUNBOOK.md`.
 
 ## Rules (non-negotiable)
 - NO secret in `index.html`. Only the Supabase publishable key belongs there.
-  KNOWN ISSUE: a Gemini key was hardcoded at `GEMINI_API_KEY` (revoke it; see RUNBOOK).
-  Target fix: call Gemini through a Supabase Edge Function that holds the key, the same
-  pattern as the Marketplace Generator's `generate` function. Do not put a new key back
-  into this file.
+  Gemini is called only through the `claims-extract` Edge Function
+  (`supabase/functions/claims-extract/index.ts`), which holds the key as the Supabase
+  secret `CLAIMS_GEMINI_API_KEY`. Never put a key back into this file.
 - New Supabase tables: explicit Data API grants in the same migration; access via
   `has_app_access('claims-tracker')`.
 - This is financial/health data: no analytics, no third-party scripts beyond supabase-js.
@@ -18,10 +17,11 @@ Maintenance steps: `RUNBOOK.md`.
 
 ## Where things are (all in `index.html`)
 - Config block near the top (`SUPABASE_URL`, anon key) · `showTab()` tabs: upload, claims, summary
-- Upload and AI extraction: `callGeminiVision()`, `buildExtractionPrompt()`, `renderReview()`,
+- Upload and AI extraction: `callGeminiVision()` (calls the Edge Function), `buildExtractionPrompt()`, `renderReview()`,
   `saveReviewed()`
 - Ledger: `loadClaims()`, `renderClaims()` · Summary and exports: `renderSummary()`,
   `exportSummaryCSV()`, `exportSummaryPDF()`, `exportCSV()`
+- Function deploy: Actions → Deploy Supabase function (manual; `deploy-function.yml`)
 - Hosting: GitHub Pages from `main`, custom domain in `CNAME`
 
 ## Cheap-change guide
