@@ -25,6 +25,7 @@ Maintenance steps: `RUNBOOK.md`.
 - Hosting: GitHub Pages from `main`, custom domain in `CNAME`
 
 ## Cheap-change guide
+- Step-by-step recipes for the usual edits: `docs/common-edits.md` (open it first).
 - Copy/text: grep the string in `index.html`, edit, commit to main (Pages redeploys).
 - Insurer-specific extraction wording: `buildExtractionPrompt()`.
 - Keep-alive workflow was removed on purpose: the shared Supabase project is kept busy by
