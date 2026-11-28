@@ -30,3 +30,5 @@ Maintenance steps: `RUNBOOK.md`.
 - Insurer-specific extraction wording: `buildExtractionPrompt()`.
 - Keep-alive workflow was removed on purpose: the shared Supabase project is kept busy by
   the ETF app's schedule, and GitHub had disabled the workflow for inactivity anyway.
+
+If something breaks (red check, failed run, no access): `docs/if-something-breaks.md` (open it first).
